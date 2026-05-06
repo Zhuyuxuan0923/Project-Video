@@ -21,6 +21,7 @@
   消息中间件         Redis 7                可靠的消息传递 (Broker + Backend)
   监控面板           Flower 2.0             Web 端实时查看任务状态
   AI 后端            可插拔架构 (Mock默认)   支持接入真实 OpenAI 等 API
+  API Scout          实时 Web 检索         自动搜索当前最新最优 API 并推荐
 
 
 3. 工作流
@@ -59,6 +60,7 @@
   [容错性] 每个任务 max_retries=3，指数退避 60s，幂等设计支持安全重试
   [可观测] Flower 面板实时展示任务进度、成功/失败/重试状态、Worker 心跳
   [可扩展] AI 后端采用抽象基类 + 注册机制，切换到真实 API 只需新增一个类
+  [智能选型] API Scout 实时检索当前最新 API 市场，自动推荐最优模型
 
 
 5. 项目文件清单
@@ -67,7 +69,8 @@
   config.py              Celery 全局配置 (broker、backend、队列、重试策略)
   celery_app.py          Celery 应用实例 (队列路由、任务注册)
   orchestrator.py        Master 调度器 (阶段编排、状态轮询、结果展示)
-  cli.py                 CLI 命令行入口 (run / status / worker 三个命令)
+  cli.py                 CLI 命令行入口 (run / status / worker / scout)
+  api_scout.py           API 实时检索推荐 (DuckDuckGo 免费搜索，无需 Key)
   docker-compose.yml     Docker 编排 (Redis + Flower)
   requirements.txt       Python 依赖
   .env.example           环境变量模板

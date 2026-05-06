@@ -159,7 +159,22 @@
       3. 真正的缘分，终究会跨过时间和距离，将两颗心再次连接在一起。
 
 
-3.4 查询任务状态
+3.4 API 检索推荐
+--------------------------------------------------------------------------------
+  在接入真实 API 之前，先检索当前市场上最好的模型：
+
+    # 检索全部三类 (文案/图片/视频)
+    python cli.py scout
+
+    # 只查某一类
+    python cli.py scout --category copywriting
+    python cli.py scout --category image_gen
+    python cli.py scout --category video_gen
+
+  工具会自动搜索 DuckDuckGo，从搜索结果中提取模型名、版本号、价格，
+  输出 Top 2 推荐（首选 + 预算备选），并附带来源链接。
+
+3.5 查询任务状态
 --------------------------------------------------------------------------------
   python cli.py status <task_id>
 
@@ -309,6 +324,7 @@
   │ python cli.py worker --type all         │ 启动全部 Worker         │
   │ python cli.py worker --type copywriting │ 启动文案 Worker         │
   │ python cli.py run "主题"                │ 提交短剧生成任务         │
+  │ python cli.py scout                     │ 检索最新 AI API 推荐     │
   │ python cli.py status <task_id>          │ 查询任务状态            │
   │ docker exec -it drama-redis redis-cli   │ 进入 Redis 命令行       │
   │ open http://localhost:5555              │ 打开 Flower 监控面板    │

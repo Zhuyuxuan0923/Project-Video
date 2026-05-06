@@ -81,5 +81,21 @@ def worker(worker_type, concurrency):
     app.worker_main(argv)
 
 
+@cli.command()
+@click.option("--category", default="all", help="类别: copywriting, image_gen, video_gen, all")
+def scout(category):
+    """检索当前最新的 AI API 并推荐 (文案/图片/视频)"""
+    from api_scout import scout_all, scout_category, print_report, CATEGORIES
+
+    if category == "all":
+        scout_all()
+    elif category in CATEGORIES:
+        data = scout_category(category)
+        print_report(data)
+    else:
+        print(f"[!] Unknown category: {category}")
+        print(f"    Available: all, {', '.join(CATEGORIES.keys())}")
+
+
 if __name__ == "__main__":
     cli()
