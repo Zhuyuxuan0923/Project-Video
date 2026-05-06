@@ -174,6 +174,27 @@
   工具会自动搜索 DuckDuckGo，从搜索结果中提取模型名、版本号、价格，
   输出 Top 2 推荐（首选 + 预算备选），并附带来源链接。
 
+3.4 Web UI (浏览器界面)
+--------------------------------------------------------------------------------
+  无需 CLI，在浏览器中直接操作：
+
+    python cli.py web
+
+  或者自定义端口：
+
+    python cli.py web --port 9090
+
+  浏览器打开: http://localhost:8080
+
+  Web UI 功能:
+    - 左侧卡片：输入主题 → 点击 Generate → 自动走完三阶段流程
+    - 流程指示器：实时展示当前进度 (Script Generation → Image Generation → Video)
+    - 右侧卡片：任务历史列表，每 3 秒自动轮询刷新状态
+    - 结果展示：视频播放器 + 场景图片画廊 + 旁白文本
+
+  ⚠ 注意：Web UI 需要 Worker 正在运行才能执行任务。
+
+
 3.5 查询任务状态
 --------------------------------------------------------------------------------
   python cli.py status <task_id>
@@ -325,6 +346,7 @@
   │ python cli.py worker --type copywriting │ 启动文案 Worker         │
   │ python cli.py run "主题"                │ 提交短剧生成任务         │
   │ python cli.py scout                     │ 检索最新 AI API 推荐     │
+  │ python cli.py web                        │ 启动 Web UI 界面         │
   │ python cli.py status <task_id>          │ 查询任务状态            │
   │ docker exec -it drama-redis redis-cli   │ 进入 Redis 命令行       │
   │ open http://localhost:5555              │ 打开 Flower 监控面板    │

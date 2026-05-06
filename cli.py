@@ -82,6 +82,18 @@ def worker(worker_type, concurrency):
 
 
 @cli.command()
+@click.option("--port", default=8080, help="Web server port")
+def web(port):
+    """启动 Web UI"""
+    import uvicorn
+    from web_ui import app
+    print(f"\n  AI Drama Studio Web UI")
+    print(f"  Open: http://localhost:{port}")
+    print(f"  Press Ctrl+C to stop\n")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
+
+
+@cli.command()
 @click.option("--category", default="all", help="类别: copywriting, image_gen, video_gen, all")
 def scout(category):
     """检索当前最新的 AI API 并推荐 (文案/图片/视频)"""

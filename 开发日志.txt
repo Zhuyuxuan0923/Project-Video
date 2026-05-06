@@ -211,6 +211,31 @@ Phase 9: API Scout 实时检索工具
       - python cli.py scout --category X  检索指定类别
 
 
+Phase 10: Web UI 极简界面
+================================================================================
+
+  10.1 需求分析
+       - 用 FastAPI + Jinja2 构建单页面 Web 界面，方便 demo 演示
+       - 浏览器输入主题 → 自动推进三阶段 → 展示最终结果
+       - 不需要 WebSocket，使用 setInterval 轮询即可
+
+  10.2 实现要点
+       - web_ui.py: FastAPI 应用，4 个 API 端点
+         GET  /              → Jinja2 渲染页面
+         POST /api/submit    → 提交文案任务
+         GET  /api/tasks     → 历史列表 + 自动刷新状态
+         GET  /api/task/{id} → 单任务详情
+         POST /api/advance   → 推进到下一阶段
+       - templates/index.html: ~200 行，暗色主题 + 双列卡片布局
+       - 流程指示器: Script → Image → Video 三步可视化
+       - 前端 JS 轮询: 1.5s 间隔查状态，3s 刷新历史
+       - CLI 集成: python cli.py web [--port]
+
+  问题记录: Starlette Jinja2Templates 与 Jinja2 3.1.6 存在缓存键类型冲突，
+  导致 TypeError: cannot use 'tuple' as a dict key。
+  解决方案: 绕过 Starlette 封装，直接使用 jinja2.Environment + HTMLResponse。
+
+
 ================================================================================
 经验总结
 ================================================================================
