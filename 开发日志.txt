@@ -236,6 +236,58 @@ Phase 10: Web UI 极简界面
   解决方案: 绕过 Starlette 封装，直接使用 jinja2.Environment + HTMLResponse。
 
 
+Phase 11: 接入真实 AI API
+================================================================================
+
+  11.1 DeepSeek 后端 (ai_backends/deepseek.py)
+       - 基于 OpenAI SDK 兼容格式
+       - 文案: DeepSeek V4 (base_url=https://api.deepseek.com/v1)
+       - 图片: 硅基流动 Qwen/Qwen-Image (base_url=https://api.siliconflow.cn/v1)
+       - generate_script: 带 system prompt 约束输出 JSON 格式剧本
+       - generate_image: 中文 prompt → 英文翻译 → API 调用
+       - generate_video: 暂用 Mock 占位
+
+  11.2 环境配置优化
+       - celery_app.py 增加 .env 自动加载 (python-dotenv)
+       - start.bat 一键启动脚本: 检查 Redis → 安装依赖 → 启动 Worker → 启动 Web UI
+       - Web UI 后端下拉框从 _registry 动态读取，不再硬编码
+
+  11.3 依赖更新 (requirements.txt)
+       - 新增: openai, python-dotenv
+       - duckduckgo-search → ddgs (包名变更)
+
+
+Phase 12: 手动保存功能
+================================================================================
+
+  12.1 需求
+       - 去掉 Worker 自动保存（素材质量不可控，用户想筛选后手动保存）
+       - Web UI 三阶段完成后出现保存按钮 + 路径输入框
+       - 用户点保存时下载图片到本地、写入 script.txt + result.json
+
+  12.2 后端改动 (web_ui.py)
+       - 新增 POST /api/save 端点
+       - 接收 task_id + save_path (Form 表单)
+       - 从 HISTORY 或 AsyncResult 查找任务结果
+       - urllib.request.urlretrieve 下载图片到 <save_path>/images/
+       - 写入 script.txt（剧本格式）和 result.json（完整数据）
+
+  12.3 前端改动 (templates/index.html)
+       - 新增全局变量 currentTaskId / currentResult 跟踪当前结果
+       - showFinalResult() 末尾渲染保存面板 (.save-section)
+       - doSave() 函数: 校验输入 → POST /api/save → 显示绿色/红色反馈
+       - 保存面板含路径输入框 + Save 按钮 + 状态反馈文字
+
+  12.4 Worker 清理
+       - 移除 tasks/image_gen.py 中的 save_images() 自动调用及导入
+       - 移除 tasks/video_gen.py 中的 save_result() 自动调用及导入
+       - output_saver.py 保留不动，CLI 模式仍可使用
+
+  12.5 新增文件
+       - output_saver.py: 通用保存模块 (make_output_folder / save_images / save_result)
+       - start.bat: Windows 一键启动脚本
+
+
 ================================================================================
 经验总结
 ================================================================================

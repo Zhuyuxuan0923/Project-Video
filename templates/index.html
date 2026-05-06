@@ -41,6 +41,13 @@
   .flow-indicator .step.active { background: var(--accent); color: #fff; }
   .flow-indicator .step.done { background: #14532d; color: var(--ok); }
   .flow-indicator .arrow { margin: 0 -2px; }
+  .save-section { margin-top: 16px; padding: 16px; background: var(--bg); border-radius: 8px; border: 1px dashed var(--border); display: flex; flex-direction: column; gap: 10px; }
+  .save-section .note { font-size: 0.75rem; color: var(--muted); }
+  .save-section .row { display: flex; gap: 8px; }
+  .save-section input { flex: 1; }
+  .save-section .feedback { font-size: 0.8rem; margin-top: 4px; }
+  .save-section .feedback.ok { color: var(--ok); }
+  .save-section .feedback.err { color: var(--err); }
 </style>
 </head>
 <body>
@@ -56,7 +63,9 @@
       <form id="drama-form" onsubmit="submitTask(event)">
         <input type="text" name="topic" id="topic" placeholder="Enter a topic, e.g. 'Cyberpunk Wuxia'" required autofocus>
         <select name="backend" id="backend">
-          <option value="mock">Mock AI (demo)</option>
+          {% for b in backends %}
+          <option value="{{ b }}">{{ b }}{% if b == 'mock' %} (demo){% endif %}</option>
+          {% endfor %}
         </select>
         <button type="submit" id="submit-btn">Generate</button>
       </form>
@@ -89,11 +98,17 @@ async function submitTask(e) {
   document.getElementById('topic').value = '';
   btn.disabled = false;
   btn.textContent = 'Generate';
-  showProgress(data.id, data.stage);
+  const backend = document.getElementById('backend').value;
+  showProgress(data.id, data.stage, backend);
   loadTasks();
 }
 
-function showProgress(taskId, stage) {
+let currentBackend = 'mock';
+let currentTaskId = null;
+let currentResult = null;
+
+function showProgress(taskId, stage, backend) {
+  currentBackend = backend || currentBackend;
   const div = document.getElementById('progress');
   const stageKeys = [{% for k in stage_keys %}'{{ k }}',{% endfor %}];
   const stageLabels = [{% for l in stage_labels %}'{{ l }}',{% endfor %}];
@@ -107,16 +122,16 @@ function showProgress(taskId, stage) {
   }
   html += '</div>';
   div.innerHTML = html;
-  pollStage(taskId, stage);
+  pollStage(taskId, stage, backend);
 }
 
-async function pollStage(taskId, stage) {
+async function pollStage(taskId, stage, backend) {
   const interval = setInterval(async () => {
     const resp = await fetch(`/api/task/${taskId}`);
     const data = await resp.json();
     if (data.state === 'SUCCESS') {
       clearInterval(interval);
-      advanceStage(taskId, stage, data.result);
+      advanceStage(taskId, stage, data.result, backend);
     } else if (data.state === 'FAILURE') {
       clearInterval(interval);
       document.getElementById('progress').innerHTML = `<p style="color:var(--err)">Failed: ${data.error || 'unknown'}</p>`;
@@ -125,9 +140,10 @@ async function pollStage(taskId, stage) {
   }, 1500);
 }
 
-async function advanceStage(taskId, currentStage, prevResult) {
+async function advanceStage(taskId, currentStage, prevResult, backend) {
   const stageKeys = [{% for k in stage_keys %}'{{ k }}',{% endfor %}];
   const idx = stageKeys.indexOf(currentStage);
+  currentTaskId = taskId;
   if (idx < 0 || idx >= stageKeys.length - 1) {
     showFinalResult(prevResult);
     loadTasks();
@@ -137,6 +153,7 @@ async function advanceStage(taskId, currentStage, prevResult) {
   const form = new FormData();
   form.append('task_id', taskId);
   form.append('stage', currentStage);
+  form.append('backend', backend || currentBackend);
   const resp = await fetch('/api/advance', {method:'POST', body:form});
   const data = await resp.json();
   if (data.error) { showFinalResult(prevResult); loadTasks(); return; }
@@ -145,6 +162,7 @@ async function advanceStage(taskId, currentStage, prevResult) {
 
 function showFinalResult(result) {
   const div = document.getElementById('result');
+  currentResult = result;
   if (!result) return;
   let html = '';
   if (result.video && result.video.video_url) {
@@ -162,8 +180,52 @@ function showFinalResult(result) {
     result.narration.forEach(n => { html += `<p>${n}</p>`; });
     html += '</div>';
   }
+  html += `
+    <div class="save-section">
+      <div class="note">Save images and script to local folder</div>
+      <div class="row">
+        <input type="text" id="save-path" placeholder="e.g. D:\\素材\\雪山落日">
+        <button onclick="doSave()">Save</button>
+      </div>
+      <div class="feedback" id="save-feedback"></div>
+    </div>`;
   div.innerHTML = html;
   document.getElementById('progress').innerHTML = '';
+}
+
+async function doSave() {
+  const pathInput = document.getElementById('save-path');
+  const fb = document.getElementById('save-feedback');
+  const savePath = pathInput.value.trim();
+  if (!savePath) {
+    fb.textContent = 'Please enter a save path';
+    fb.className = 'feedback err';
+    return;
+  }
+  if (!currentTaskId || !currentResult) {
+    fb.textContent = 'No result to save';
+    fb.className = 'feedback err';
+    return;
+  }
+  const form = new FormData();
+  form.append('task_id', currentTaskId);
+  form.append('save_path', savePath);
+  fb.textContent = 'Saving...';
+  fb.className = 'feedback';
+  try {
+    const resp = await fetch('/api/save', {method:'POST', body:form});
+    const data = await resp.json();
+    if (data.ok) {
+      fb.textContent = `Saved to ${data.path} (${data.images_saved} images, ${data.files.length} files)`;
+      fb.className = 'feedback ok';
+    } else {
+      fb.textContent = data.error || 'Save failed';
+      fb.className = 'feedback err';
+    }
+  } catch (e) {
+    fb.textContent = 'Network error: ' + e.message;
+    fb.className = 'feedback err';
+  }
 }
 
 async function loadTasks() {

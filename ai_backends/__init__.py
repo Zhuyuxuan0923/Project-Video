@@ -1,9 +1,13 @@
 from .base import BaseAIBackend
 from .mock import MockAIBackend
+from .deepseek import DeepSeekBackend
 
-__all__ = ["BaseAIBackend", "MockAIBackend"]
+__all__ = ["BaseAIBackend", "MockAIBackend", "DeepSeekBackend"]
 
-_registry = {"mock": MockAIBackend}
+_registry = {
+    "mock": MockAIBackend,
+    "deepseek": DeepSeekBackend,
+}
 
 
 def get_backend(name: str = "mock") -> BaseAIBackend:

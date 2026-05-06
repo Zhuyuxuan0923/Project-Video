@@ -191,6 +191,11 @@
     - 流程指示器：实时展示当前进度 (Script Generation → Image Generation → Video)
     - 右侧卡片：任务历史列表，每 3 秒自动轮询刷新状态
     - 结果展示：视频播放器 + 场景图片画廊 + 旁白文本
+    - 手动保存：三阶段完成后出现保存面板，输入路径(如 D:\素材\雪山落日)
+      → 点击 Save 下载图片到本地、写入 script.txt 和 result.json
+
+  一键启动 (Windows):
+    双击项目根目录的 start.bat，自动检查 Redis → 安装依赖 → 启动 Worker → 启动 Web UI
 
   ⚠ 注意：Web UI 需要 Worker 正在运行才能执行任务。
 
@@ -259,9 +264,26 @@
 六、接入真实 AI API
 ================================================================================
 
-6.1 创建新后端
+6.0 内置真实后端 (已可用)
 --------------------------------------------------------------------------------
-  在 ai_backends/ 目录新建文件，例如 openai.py:
+  项目已内置 deepseek 后端，开箱即用：
+    - 文案: DeepSeek V4 (OpenAI 兼容格式)
+    - 图片: 硅基流动 Qwen/Qwen-Image
+    - 视频: Mock (占位)
+
+  使用方式:
+    # Web UI: 后端下拉框选择 deepseek，提交主题即可
+    python cli.py web
+
+    # CLI: 指定 --backend deepseek
+    python cli.py run "雪山落日" --backend deepseek
+
+  注意: 需要在 .env 文件中配置 API Key (已 gitignore)。
+
+
+6.1 创建新后端 (自定义)
+--------------------------------------------------------------------------------
+  如需接入其他 API，在 ai_backends/ 目录新建文件，例如 openai.py:
 
     from .base import BaseAIBackend
     import openai
