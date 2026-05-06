@@ -1,0 +1,315 @@
+================================================================================
+                    AI短剧自动生成系统 - 启动指南
+================================================================================
+
+适用范围: Windows 11 / macOS / Linux
+前提条件: Python 3.10+, Docker Desktop, Git Bash (Windows)
+
+
+================================================================================
+一、环境准备
+================================================================================
+
+1.1 安装 Python 依赖
+--------------------------------------------------------------------------------
+  打开终端，进入项目目录：
+
+    cd "C:\Users\86136\Desktop\基于Celery分布式任务队列的AI短剧自动生成系统"
+
+  安装依赖包：
+
+    pip install -r requirements.txt
+
+  验证安装：
+
+    python -c "import celery; print('Celery', celery.__version__)"
+
+
+1.2 启动 Redis (Docker)
+--------------------------------------------------------------------------------
+  确保 Docker Desktop 正在运行，然后：
+
+    docker-compose up -d redis
+
+  验证 Redis 是否正常：
+
+    python -c "import redis; r=redis.Redis(host='localhost',port=6379); print(r.ping())"
+
+  期望输出: True
+
+
+1.3 启动 Flower 监控面板 (可选)
+--------------------------------------------------------------------------------
+  docker-compose up -d flower
+
+  或者本地启动:
+
+    python -m celery -A celery_app flower --port=5555
+
+  浏览器打开: http://localhost:5555
+
+
+================================================================================
+二、启动 Worker
+================================================================================
+
+2.1 启动全部 Worker (推荐入门方式)
+--------------------------------------------------------------------------------
+  新开一个终端：
+
+    python cli.py worker --type all
+
+  输出示例:
+
+    ==================================================
+      启动 Worker: all
+      监听队列: ['copywriting', 'image_gen', 'video_gen']
+    ==================================================
+    -------------- drama-all@HOSTNAME v5.6.3 (recovery)
+    ...
+    [queues]
+      .> copywriting   exchange=copywriting(direct) key=copywriting
+      .> image_gen     exchange=image_gen(direct) key=image_gen
+      .> video_gen     exchange=video_gen(direct) key=video_gen
+    [tasks]
+      . tasks.copywriting.generate_script
+      . tasks.image_gen.generate_images
+      . tasks.video_gen.generate_video
+    ...
+    drama-all@HOSTNAME ready.
+
+
+2.2 分别启动专用 Worker (生产推荐)
+--------------------------------------------------------------------------------
+  终端 A - 文案 Worker:
+
+    python cli.py worker --type copywriting
+
+  终端 B - 图片 Worker:
+
+    python cli.py worker --type image_gen
+
+  终端 C - 视频 Worker:
+
+    python cli.py worker --type video_gen
+
+  每个 Worker 可以独立设置并发数:
+
+    python cli.py worker --type image_gen --concurrency 4
+
+
+================================================================================
+三、提交任务
+================================================================================
+
+3.1 基本用法
+--------------------------------------------------------------------------------
+  再开一个新终端：
+
+    python cli.py run "你的主题"
+
+  示例:
+
+    python cli.py run "霸道总裁爱上我"
+    python cli.py run "赛博朋克武侠"
+    python cli.py run "穿越到古代的AI工程师"
+
+3.2 自定义参数
+--------------------------------------------------------------------------------
+  指定 AI 后端和超时时间:
+
+    python cli.py run "科幻爱情" --backend mock --timeout 300
+
+3.3 运行过程输出
+--------------------------------------------------------------------------------
+  =======================================================
+    AI Drama Auto-Generation System
+    Topic: 赛博朋克武侠
+    Backend: mock
+  =======================================================
+
+    [COPYWRITING] Starting Script Generation...
+        Task ID: 2b31ce03-...
+        [OK] Script Generation: completed
+
+    [IMAGE_GEN] Starting Image Generation...
+        Task ID: a3d82b79-...
+        [OK] Image Generation: completed
+
+    [VIDEO_GEN] Starting Video Composition...
+        Task ID: 3701706c-...
+        [OK] Video Composition: completed
+
+  =======================================================
+    *** Final Result ***
+  =======================================================
+    Title: 命运的重逢
+    Scenes: 3
+    Images: 3
+      - Scene 1: https://picsum.photos/seed/fb402322/800/600
+      - Scene 2: https://picsum.photos/seed/13eab05a/800/600
+      - Scene 3: https://picsum.photos/seed/3403b228/800/600
+    Video URL: https://example.com/videos/363cfa...mp4
+    Duration: 9s
+    Resolution: 1920x1080
+
+    Narrations:
+      1. 在这座拥有千万人口的城市里，两个人的相遇只需要一个瞬间。
+      2. 命运总是喜欢开玩笑，让彼此思念的人擦肩而过。
+      3. 真正的缘分，终究会跨过时间和距离，将两颗心再次连接在一起。
+
+
+3.4 查询任务状态
+--------------------------------------------------------------------------------
+  python cli.py status <task_id>
+
+  示例:
+
+    python cli.py status 2b31ce03-01bb-48a9-bdec-0b648788fdfd
+
+  输出:
+
+    任务ID: 2b31ce03-...
+    状态: SUCCESS
+    详情: {'title': '命运的重逢', 'scenes': [...], ...}
+
+
+================================================================================
+四、监控与观察
+================================================================================
+
+4.1 Flower Web 面板
+--------------------------------------------------------------------------------
+  浏览器访问: http://localhost:5555
+
+  可查看:
+    - Dashboard: 整体任务统计 (成功/失败/重试/活跃)
+    - Workers: 在线 Worker 列表及资源使用
+    - Tasks: 已注册的所有任务类型及参数
+    - Monitor: 实时任务执行流 (成功为绿色，失败为红色)
+    - Task 详情页: 点任意任务查看入参、返回值、执行耗时、重试历史
+
+
+4.2 Redis 命令行监控
+--------------------------------------------------------------------------------
+  # 进入 Redis
+  docker exec -it drama-redis redis-cli
+
+  # 查看队列长度
+  LLEN copywriting
+  LLEN image_gen
+  LLEN video_gen
+
+  # 查看所有 Celery 相关 key
+  KEYS celery-*
+
+  # 查看特定任务
+  GET celery-task-meta-<task_id>
+
+
+================================================================================
+五、停止系统
+================================================================================
+
+  # 停止 Worker: 在 Worker 终端按 Ctrl+C
+  # 停止 Docker 服务:
+  docker-compose down
+
+  # 停止并清理数据卷:
+  docker-compose down -v
+
+
+================================================================================
+六、接入真实 AI API
+================================================================================
+
+6.1 创建新后端
+--------------------------------------------------------------------------------
+  在 ai_backends/ 目录新建文件，例如 openai.py:
+
+    from .base import BaseAIBackend
+    import openai
+
+    class OpenAIBackend(BaseAIBackend):
+
+        def __init__(self):
+            self.client = openai.OpenAI(api_key="your-key")
+
+        def generate_script(self, topic: str) -> dict:
+            response = self.client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": f"写一个短剧剧本，主题：{topic}"}],
+            )
+            # 解析 response 并返回 dict
+            ...
+
+        def generate_image(self, prompt: str, index: int) -> dict:
+            response = self.client.images.generate(
+                model="dall-e-3", prompt=prompt, size="1024x1024"
+            )
+            return {"scene_id": index+1, "url": response.data[0].url, ...}
+
+        def generate_video(self, scenes, images) -> dict:
+            # 调用视频生成 API
+            ...
+
+6.2 注册后端
+--------------------------------------------------------------------------------
+  在 ai_backends/__init__.py 的 _registry 字典中添加:
+
+    from .openai import OpenAIBackend
+
+    _registry = {
+        "mock": MockAIBackend,
+        "openai": OpenAIBackend,
+    }
+
+6.3 使用新后端
+--------------------------------------------------------------------------------
+  python cli.py run "AI觉醒" --backend openai
+
+
+================================================================================
+七、常见问题
+================================================================================
+
+  Q: Worker 启动后提示 "DuplicateNodenameWarning"
+  A: 有残留 Worker 进程。关闭所有终端中的 Worker (Ctrl+C)，然后
+     ps aux | grep python  查找并 kill 残留进程后重启。
+
+  Q: 任务一直处于 PENDING 不执行
+  A: 检查 Worker 是否启动并 listening 对应队列。
+     确认 Redis 连接正常: python -c "import redis; r=redis.Redis(); r.ping()"
+
+  Q: 提示 "Connection refused" 连接 Redis 失败
+  A: Redis 未启动。执行 docker-compose up -d redis
+
+  Q: Docker Desktop 未运行怎么办
+  A: 启动 Docker Desktop 应用程序，等待状态栏图标变为稳定状态。
+     如果无法使用 Docker，也可安装 Windows 版 Redis 或使用 WSL。
+
+  Q: 如何修改重试次数和间隔
+  A: 编辑 config.py 中的 task_max_retries 和 task_default_retry_delay。
+     也可以在单个任务装饰器上自定义 max_retries 和 default_retry_delay。
+
+  Q: Mock 后端返回的数据每次都一样
+  A: Mock 后端返回固定示例数据，仅用于功能验证。修改 ai_backends/mock.py
+     中的 SAMPLE_SCRIPTS 可以自定义示例内容。或接入真实 AI API (见第六章)。
+
+
+================================================================================
+八、命令速查表
+================================================================================
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ 命令                                    │ 说明                   │
+  ├─────────────────────────────────────────────────────────────────┤
+  │ docker-compose up -d                    │ 启动 Redis + Flower    │
+  │ docker-compose down                     │ 停止所有容器            │
+  │ python cli.py worker --type all         │ 启动全部 Worker         │
+  │ python cli.py worker --type copywriting │ 启动文案 Worker         │
+  │ python cli.py run "主题"                │ 提交短剧生成任务         │
+  │ python cli.py status <task_id>          │ 查询任务状态            │
+  │ docker exec -it drama-redis redis-cli   │ 进入 Redis 命令行       │
+  │ open http://localhost:5555              │ 打开 Flower 监控面板    │
+  └─────────────────────────────────────────────────────────────────┘

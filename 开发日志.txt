@@ -1,0 +1,205 @@
+================================================================================
+                    AI短剧自动生成系统 - 开发日志
+================================================================================
+
+日期: 2026-05-06
+开发者: Claude Code + 用户协作
+项目路径: C:\Users\86136\Desktop\基于Celery分布式任务队列的AI短剧自动生成系统
+
+
+================================================================================
+Phase 1: 架构设计与评审
+================================================================================
+
+  1.1 需求分析
+      - 梳理四大核心服务：Master调度器、三个专用Worker、Redis中间件、Flower监控
+      - 确定数据流方向：用户输入主题 → 文案 → 图片 → 视频 → 输出结果
+      - 明确容错需求：每步失败自动重试，整个链路状态可观测
+
+  1.2 技术选型
+      - Celery 5.x: Python 生态最成熟的分布式任务队列
+      - Redis 7: Celery 官方推荐的 Broker + Result Backend
+      - Flower 2.0: Celery 配套监控工具，开箱即用
+      - Click + Rich: 终端 CLI 框架
+      - 可插拔 AI 后端: 抽象基类 + Mock 默认实现
+
+  1.3 项目结构设计
+      - config.py: 集中管理所有 Celery 配置
+      - celery_app.py: 单例 Celery 应用实例
+      - tasks/: 三个独立 Worker 任务模块
+      - ai_backends/: 可插拔 AI 后端 (base + mock + 未来扩展)
+      - orchestrator.py: Master 调度器
+      - cli.py: CLI 入口
+
+  1.4 关键设计决策
+      - 采用三个独立队列而非单队列：支持未来不同 Worker 独立扩缩容
+      - 手动编排代替 Celery Chain：更稳健、更可调试、每步状态可见
+      - solo 池代替 prefork：规避 Python 3.14 + Windows 兼容性问题
+
+
+================================================================================
+Phase 2: 基础骨架搭建
+================================================================================
+
+  2.1 项目初始化
+      - 创建目录结构: tasks/, ai_backends/
+      - 编写 requirements.txt (celery[redis], flower, click)
+      - 编写 docker-compose.yml (Redis 7 + Flower 2.0)
+      - 编写 .env.example
+
+  2.2 Celery 核心配置 (config.py + celery_app.py)
+      - Broker: redis://localhost:6379/0
+      - Result Backend: redis://localhost:6379/1
+      - 序列化: JSON
+      - 时区: Asia/Shanghai
+      - 队列定义: copywriting, image_gen, video_gen (各含 exchange + routing_key)
+      - 全局重试: max_retries=3, retry_delay=60s
+      - 任务路由: 按模块名自动路由到对应队列
+
+  问题记录: 初始使用 BROKER_URL / RESULT_BACKEND 大写命名，Celery 5.6 弃用警告。
+  解决方案: 改为 broker_url / result_backend 小写命名。
+
+
+================================================================================
+Phase 3: AI 后端模块实现
+================================================================================
+
+  3.1 抽象基类 (base.py)
+      - generate_script(topic) → dict
+      - generate_image(prompt, index) → dict
+      - generate_video(scenes, images) → dict
+
+  3.2 Mock 后端 (mock.py)
+      - 内置中文短剧示例剧本 (3个场景 + 旁白)
+      - 图片使用 picsum.photos 生成随机占位图
+      - 视频返回模拟 URL 和时长
+      - 每步模拟处理耗时 (2s / 1.5s per scene / 3s)
+
+  3.3 注册机制 (__init__.py)
+      - _registry 字典管理后端映射
+      - get_backend(name) 工厂函数
+
+
+================================================================================
+Phase 4: Worker 任务实现
+================================================================================
+
+  4.1 文案生成 (tasks/copywriting.py)
+      - @shared_task(bind=True, max_retries=3, default_retry_delay=60)
+      - 输入: topic (str)
+      - 调用: backend.generate_script(topic)
+      - 异常处理: 捕获所有异常，自动重试，超限后抛出 MaxRetriesExceededError
+
+  4.2 图片生成 (tasks/image_gen.py)
+      - 输入: script_result (dict) - 上一步的完整输出
+      - 遍历 scenes 列表，为每个场景调用 backend.generate_image()
+      - 在输入 dict 上追加 images 字段后返回
+
+  4.3 视频合成 (tasks/video_gen.py)
+      - 输入: script_result (dict) - 包含 scripts + images
+      - 调用 backend.generate_video(scenes, images)
+      - 组装最终输出结构: {topic, title, scenes, images, narration, video}
+
+
+================================================================================
+Phase 5: Master 调度器实现
+================================================================================
+
+  5.1 DramaOrchestrator 类设计
+      - __init__(backend_name): 指定 AI 后端
+      - get_status(task_id): 查询任务状态 (Redis backend)
+      - _dispatch(stage, data): 分发到对应 Worker
+      - _wait_for_task(task_id): 轮询等待任务完成
+      - run_and_wait(topic): 串联三步流程 + 实时打印进度
+
+  5.2 关键实现细节
+      - 三步流程: copywriting → image_gen → video_gen
+      - 每步超时独立计算: total_timeout / 3
+      - 实时动画进度: [>] running. → [>] running.. → [>] running...
+      - 最终结果格式化输出: 标题、场景、图片URL、视频URL、旁白
+
+  版本变更:
+      v1.0: 使用 Celery chain 跨队列编排
+      v2.0: 改为手动编排 (chain 在 Python 3.14 上有回调兼容性问题)
+
+
+================================================================================
+Phase 6: CLI 命令行入口
+================================================================================
+
+  6.1 Click 命令组
+      - run <topic> [--backend] [--timeout]: 提交并等待任务完成
+      - status <task_id>: 查询任务状态
+      - worker --type <type> --concurrency <n>: 启动 Worker
+
+  6.2 Worker 启动参数
+      使用 -P solo 池避免 Windows 兼容问题
+      hostname 使用 drama-{type}@%h 区分节点
+
+
+================================================================================
+Phase 7: 端到端调试验证
+================================================================================
+
+  7.1 环境准备
+      - 安装 Python 依赖 (celery, redis, flower, click)
+      - 启动 Docker Desktop
+      - docker-compose up -d redis (启动 Redis 7 容器)
+
+  7.2 问题排查与修复
+
+      问题1: GBK 编码异常
+      ├─ 现象: emoji 字符 (⭕▶️✅❌♻️⭐) 无法在 Windows GBK 终端输出
+      └─ 修复: 全部替换为 ASCII 安全字符 ([...] [>] [OK] [XX] [~] [*])
+
+      问题2: Celery chain 在 Python 3.14 上回调失败
+      ├─ 现象: fast_trace_task 中 _localized 为空列表，解包失败
+      ├─ 根因: Celery 5.6.3 与 Python 3.14 的 trace 优化存在兼容性 bug
+      └─ 修复: 放弃 Celery chain，改为 orchestrator 手动分发 + 轮询编排
+
+      问题3: Celery prefork 池在 Windows 上子进程失败
+      ├─ 现象: billiard pool 子进程中 _loc 为 None
+      └─ 修复: 改用 -P solo 单进程池 (对于 demo 场景性能够用)
+
+      问题4: 多个僵尸 Worker 进程导致任务路由混乱
+      ├─ 现象: 任务有时成功有时失败，行为不稳定
+      ├─ 根因: 之前调试时启动的 Worker (prefork+threads+solo) 全部留存
+      │         在 Redis 中产生冲突的节点注册和队列消费
+      └─ 修复: 批量 kill 僵尸进程，统一使用 solo 池重启
+
+  7.3 最终验证
+      - 测试主题: "赛博朋克武侠"
+      - 文案生成: 2s ✓
+      - 图片生成: 5s (3张图) ✓
+      - 视频合成: 4s (9秒视频) ✓
+      - Flower 面板: http://localhost:5555 ✓
+      - status 命令: 正确返回任务详情 ✓
+
+
+================================================================================
+Phase 8: 文档输出
+================================================================================
+
+  - 项目总结.txt: 架构总览 + 技术选型 + 核心特性 + 扩展方向
+  - 开发日志.txt: 全流程开发记录 + 问题排查过程 (本文档)
+  - 启动指南.txt: 分步操作手册 + 常见问题解答
+
+
+================================================================================
+经验总结
+================================================================================
+
+  1. Celery 在新 Python 版本上可能存在兼容性风险，建议生产环境使用成熟的
+     Python+Celery 版本组合 (如 Python 3.11 + Celery 5.3)。
+
+  2. 手动编排比链式调用更稳健。虽然 Celery chain/chord 语法优雅，但在
+     异常处理和跨队列场景下可控性差，项目最终采用手动编排是正确选择。
+
+  3. 进程管理很重要。多次调试启动的 Worker 如不销毁会互相干扰，导致诡异的
+     间歇性故障。应在每次测试前检查并清理残留进程。
+
+  4. 可插拔架构代价小收益大。AI 后端抽象只花了约 30 行代码，但为后续接入
+     真实 API 铺平了道路，无需修改任何 Worker 或调度器代码。
+
+  5. ASCII-safe 文案是跨平台 CLI 工具的最佳实践，避免依赖 emoji 或特殊
+     Unicode 字符。
